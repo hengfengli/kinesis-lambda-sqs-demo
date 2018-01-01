@@ -41,7 +41,7 @@ $ pip install troposphere
 $ python create-stack.py > template.json
 ```
 
-Now, you can go to AWS CloudFormation and create a stack based on the template json file. 
+Now, you can go to AWS CloudFormation and create a stack based on the template json file. You need to configure `Stack Name`, `Code S3 Bucket Name`, `Code S3 Key`, `Code S3 Object Version ID`. 
 
 ## Test
 
