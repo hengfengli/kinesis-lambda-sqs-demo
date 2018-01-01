@@ -1,0 +1,217 @@
+{
+    "Description": "AWS CloudFormation Template: Kinesis Stream + Lambda + SQS.",
+    "Outputs": {
+        "CapturedDataStreamName": {
+            "Description": "CapturedDataKinesisStreamName",
+            "Value": {
+                "Ref": "CapturedDataKinesisStream"
+            }
+        }
+    },
+    "Parameters": {
+        "CapturedDataKinesisStreamName": {
+            "Default": "simple-stream",
+            "Description": "Name of Captured Data Kinesis Stream",
+            "Type": "String"
+        },
+        "CodeS3Bucket": {
+            "Description": "Name of code bucket",
+            "Type": "String"
+        },
+        "CodeS3Key": {
+            "Description": "Name of code zip file",
+            "Type": "String"
+        },
+        "CodeS3ObjectVersionID": {
+            "Description": "Version ID of zip file",
+            "Type": "String"
+        },
+        "LambdaMemorySize": {
+            "AllowedValues": [
+                128,
+                192,
+                256,
+                320,
+                384,
+                448,
+                512,
+                576,
+                640,
+                704,
+                768,
+                832,
+                896,
+                960,
+                1024,
+                1088,
+                1152,
+                1216,
+                1280,
+                1344,
+                1408,
+                1472,
+                1536
+            ],
+            "Default": "128",
+            "Description": "Amount of memory to allocate to the Lambda Function",
+            "Type": "Number"
+        },
+        "LambdaTimeout": {
+            "Default": "60",
+            "Description": "Timeout in seconds for the Lambda function",
+            "Type": "Number"
+        },
+        "SQSQueueName": {
+            "Default": "simple-queue",
+            "Description": "Name of Captured Data SQS",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "CapturedDataKinesisStream": {
+            "Properties": {
+                "Name": {
+                    "Ref": "CapturedDataKinesisStreamName"
+                },
+                "RetentionPeriodHours": 24,
+                "ShardCount": 1
+            },
+            "Type": "AWS::Kinesis::Stream"
+        },
+        "CapturedDataQueue": {
+            "Properties": {
+                "QueueName": {
+                    "Ref": "SQSQueueName"
+                }
+            },
+            "Type": "AWS::SQS::Queue"
+        },
+        "CapturedDataQueuePolicy": {
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "SQS:*",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::GetAtt": [
+                                        "LambdaExecutionRole",
+                                        "Arn"
+                                    ]
+                                }
+                            },
+                            "Resource": {
+                                "Fn::GetAtt": [
+                                    "CapturedDataQueue",
+                                    "Arn"
+                                ]
+                            },
+                            "Sid": "LambdaWriteToQueue"
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Queues": [
+                    {
+                        "Ref": "CapturedDataQueue"
+                    }
+                ]
+            },
+            "Type": "AWS::SQS::QueuePolicy"
+        },
+        "LambdaExecutionRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AmazonKinesisReadOnlyAccess",
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+                ],
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Statement": [
+                                {
+                                    "Action": [
+                                        "logs:*"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                }
+                            ],
+                            "Version": "2012-10-17"
+                        },
+                        "PolicyName": "root"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "LambdaKinesisTrigger": {
+            "Properties": {
+                "BatchSize": 100,
+                "Enabled": true,
+                "EventSourceArn": {
+                    "Fn::GetAtt": [
+                        "CapturedDataKinesisStream",
+                        "Arn"
+                    ]
+                },
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "ReadKinesisAndPutQueueFunction",
+                        "Arn"
+                    ]
+                },
+                "StartingPosition": "TRIM_HORIZON"
+            },
+            "Type": "AWS::Lambda::EventSourceMapping"
+        },
+        "ReadKinesisAndPutQueueFunction": {
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "CodeS3Bucket"
+                    },
+                    "S3Key": {
+                        "Ref": "CodeS3Key"
+                    },
+                    "S3ObjectVersion": {
+                        "Ref": "CodeS3ObjectVersionID"
+                    }
+                },
+                "Handler": "lambda_function.lambda_handler",
+                "MemorySize": {
+                    "Ref": "LambdaMemorySize"
+                },
+                "Role": {
+                    "Fn::GetAtt": [
+                        "LambdaExecutionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.6",
+                "Timeout": {
+                    "Ref": "LambdaTimeout"
+                }
+            },
+            "Type": "AWS::Lambda::Function"
+        }
+    }
+}
